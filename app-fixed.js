@@ -148,6 +148,7 @@ let activeLetterId = null;
 let activeLetterCanComment = false;
 let selectedNationalityCode = null;
 let nationalityModalLocked = false;
+let isSubmittingComment = false;
 
 let currentLanguage = localStorage.getItem("penpal-language") || "en";
 let isDarkMode = localStorage.getItem("penpal-dark-mode") === "true";
@@ -1518,34 +1519,19 @@ async function getTranslatedCommentText(letterId, commentId, comment) {
     return "";
   }
 
-  // 이미 API로 번역된 댓글이 있으면 그걸 사용
   const cachedText = comment.apiTranslations?.[currentLanguage];
 
   if (cachedText) {
     return cachedText;
   }
 
-  // 댓글도 originalLanguage가 실제 작성 언어와 다를 수 있으므로 자동 감지 번역 사용
   const translatedText = await translateTextWithFunction(
     originalText,
     currentLanguage
   );
 
-  // 댓글 캐시 저장 실패가 번역 표시 실패로 이어지지 않게 분리
-  try {
-    await updateDoc(
-      doc(db, "letters", letterId, "comments", commentId),
-      {
-        [`apiTranslations.${currentLanguage}`]: translatedText
-      }
-    );
-  } catch (cacheError) {
-    console.warn("댓글 번역 캐시 저장 실패:", cacheError);
-  }
-
   return translatedText;
 }
-
 function updateContentCounter() {
   if (!contentInput || !contentCount) {
     return;
@@ -2583,6 +2569,10 @@ function listenToComments(letterId) {
 commentForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
 
+  if (isSubmittingComment) {
+    return;
+  }
+
   if (!activeLetterId || !activeLetterCanComment) {
     showToast(t("commentOnlyReaders"), "error");
     return;
@@ -2593,6 +2583,8 @@ commentForm?.addEventListener("submit", async (event) => {
   if (!text) {
     return;
   }
+
+  isSubmittingComment = true;
 
   try {
   const commentRef = doc(collection(db, "letters", activeLetterId, "comments"));
@@ -2634,6 +2626,8 @@ apiTranslations: {},
   } catch (error) {
     console.error("댓글 작성 오류:", error);
     showToast(t("commentFail"), "error");
+  } finally {
+    isSubmittingComment = false;
   }
 });
 
@@ -2704,7 +2698,6 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-mobileWriteBtn?.addEventListener("click", openMobileWritePanel);
 
 mobileFormCloseBtn?.addEventListener("click", closeMobileWritePanel);
 
